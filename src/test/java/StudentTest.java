@@ -1,85 +1,69 @@
 import com.github.javafaker.Faker;
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.support.ui.ExpectedCondition;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
-import org.testng.Assert;
+import org.testng.ITestResult;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+import page_objects.AddStudentPage;
+import page_objects.AllStudentsPage;
+import page_objects.Notifications;
+import utils.DriverManager;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 
+import static constants.AllConstants.GenderConstants.MALE;
+import static constants.AllConstants.Messages.STUDENT_SUCCESSFULLY_ADDED;
+import static constants.AllConstants.Messages.WAS_ADDED_TO_THE_SYSTEM;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
+import static utils.ConfigHelper.getConfig;
+import static utils.DriverManager.*;
+
 public class StudentTest {
+    private WebDriverWait driverWait = new WebDriverWait(getInstance(), Duration.ofSeconds(10));
+    private AllStudentsPage allStudentsPage;
+    private AddStudentPage addStudentPage;
+    private Notifications notifications;
 
-    WebDriver driver;
+    private final Faker dataFaker = new Faker();
 
-    WebDriverWait driverWait;
-
-    Faker dataFarek = new Faker();
-
-    private final String APP_URL = "http://app.acodemy.lv/";
-    @BeforeMethod
-    public void initialize(){
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--remote-allow-origins=*");
-        driver = new ChromeDriver(options);
-        driverWait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        driver.get(APP_URL);
+    @BeforeMethod(alwaysRun = true)
+    public void initialize(Method method) {
+        testName = (method.getName());
+        DriverManager.getInstance().get(getConfig().getString("student.app.hostname"));
+        allStudentsPage = new AllStudentsPage();
+        addStudentPage = new AddStudentPage();
+        notifications = new Notifications();
     }
 
-    @AfterMethod
-    public void tearDown(){
-        driver.close();
-        driver.quit();
+    @AfterMethod(alwaysRun = true)
+    public void tearDown(ITestResult result) {
+        if (!getConfig().getBoolean("student.app.run.locally")) markRemoteTest(result);
+        closeDriver();
     }
 
-    @Test
+    @Test(description = "Add student and check successful message")
     public void openStudentApp() {
-        driverWait.until(ExpectedConditions.elementToBeClickable(By.xpath("//div[@class='ant-table-title']//button")));
-        WebElement addStudentButton = driver.findElement(By.xpath("//div[@class='ant-table-title']//button"));
-        addStudentButton.click();
+        allStudentsPage.waitAndClickOnAddStudentButton();
 
-        driverWait.until(ExpectedConditions.visibilityOfElementLocated(By.id("name")));
-        WebElement nameField = driver.findElement(By.id("name"));
-        String name = dataFarek.pokemon().name();
-        nameField.sendKeys(name);
+        String name = dataFaker.name().firstName();
+        String email = dataFaker.internet().emailAddress();
+        addStudentPage.waitAndSetValueForNameField(name);
+        addStudentPage.waitAndSetValueForEmailField(email);
+        addStudentPage.waitAndSetGender(MALE);
+        addStudentPage.clickOnSubmitButton();
 
-        WebElement emailField = driver.findElement(By.id("email"));
-        String email = dataFarek.internet().emailAddress();
-        emailField.sendKeys(email);
+        assertEquals(notifications.getMessageFromNotification(), STUDENT_SUCCESSFULLY_ADDED);
+        assertEquals(notifications.getDescriptionFromNotification(), String.format(WAS_ADDED_TO_THE_SYSTEM, name));
 
-        WebElement genderField = driver.findElement(By.id("gender"));
-        genderField.click();
+        notifications.getPopUpCloseButton().click();
+        assertTrue(driverWait.until(ExpectedConditions.invisibilityOf(notifications.getPopUpCloseButton())));
+    }
 
-        driverWait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//div[@title='OTHER']")));
-
-        WebElement valueFromDropdown = driver.findElement(By.xpath("//div[@title='OTHER']"));
-        valueFromDropdown.click();
-
-        driverWait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//div[@class='ant-form-item-control-input-content']//button")));
-        WebElement submitButton = driver.findElement(By.xpath("//div[@class='ant-form-item-control-input-content']//button"));
-        submitButton.click();
-
-        driverWait.until(ExpectedConditions.visibilityOfElementLocated(By.className("ant-notification-notice-message")));
-        WebElement notificationMessage = driver.findElement(By.className("ant-notification-notice-message"));
-        WebElement notificationDescription = driver.findElement(By.className("ant-notification-notice-description"));
-
-        Assert.assertEquals(notificationMessage.getText(),"Student successfully added");
-        Assert.assertEquals(notificationDescription.getText(),name + " was added to the system");
-
-        WebElement notificationNoticeClose = driver.findElement(By.className("ant-notification-notice-close"));
-        notificationNoticeClose.click();
-        Assert.assertTrue(driverWait.until(ExpectedConditions.invisibilityOf(notificationMessage)));
-
-        //Assert.assertFalse(notificationNoticeClose.isDisplayed());
-        //Assert.assertFalse(notificationMessage.isDisplayed());
-
-        System.out.println();
-
+    @Test()
+    public void checkTitle() {
+        assertEquals(getInstance().getTitle(), "acodemy - React App");
     }
 }
